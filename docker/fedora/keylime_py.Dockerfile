@@ -20,9 +20,18 @@ RUN ["chmod", "+x", "/root/wait.sh"]
 
 
 # Install dev tools and libraries (includes openssl-devel)
-RUN dnf groupinstall -y \
-    "Development Tools" \
-    "Development Libraries"
+RUN dnf install -y \
+    gcc \
+    gcc-c++ \
+    make \
+    git \
+    pkgconfig \
+    openssl-devel \
+    libtool \
+    autoconf \
+    automake \
+    libcurl-devel \
+ && dnf clean all
 
 # Install additional packages
 RUN dnf install -y \

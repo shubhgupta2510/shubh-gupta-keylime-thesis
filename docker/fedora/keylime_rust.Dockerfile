@@ -15,9 +15,18 @@ ENV container docker
 COPY dbus-policy.conf /etc/dbus-1/system.d/
 
 # Install dev tools and libraries (includes openssl-devel)
-RUN dnf groupinstall -y \
-    "Development Tools" \
-    "Development Libraries"
+RUN dnf install -y \
+    gcc \
+    gcc-c++ \
+    make \
+    git \
+    pkgconfig \
+    openssl-devel \
+    libtool \
+    autoconf \
+    automake \
+    libcurl-devel \
+ && dnf clean all
 
 
 # Packaged dependencies
