@@ -84,13 +84,13 @@ RUN dnf install -y \
     which
 
 WORKDIR ${HOME}
-RUN git clone https://github.com/keylime/keylime.git && \
-cd keylime && \
+RUN git clone https://github.com/shubhgupta2510/shubh-keylime-repo.git && \
+cd shubh-keylime-repo && \
 sed -e 's/127.0.0.1/0.0.0.0/g' keylime-agent.conf > tmp_keylime-agent.conf && \
 mv tmp_keylime-agent.conf keylime-agent.conf && \
-python3 ${KEYLIME_HOME}/setup.py install && \
-pip3 install -r $KEYLIME_HOME/requirements.txt && \
-${KEYLIME_HOME}/services/installer.sh
+pip3 install -r requirements.txt && \
+python3 setup.py install && \
+services/installer.sh
 
 RUN dnf makecache && \
   dnf clean all && \
