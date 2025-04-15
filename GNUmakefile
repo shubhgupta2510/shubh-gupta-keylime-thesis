@@ -16,8 +16,8 @@ endif
 systemdsystemunitdir := $(shell pkg-config systemd --variable=systemdsystemunitdir)
 
 programs = \
-	${TARGETDIR}/${PROFILE}/keylime_agent \
-	${TARGETDIR}/${PROFILE}/keylime_ima_emulator
+	${TARGETDIR}/${PROFILE}/keylime-agent \
+	${TARGETDIR}/${PROFILE}/keylime-ima-emulator
 
 .PHONY: all
 all: $(programs)

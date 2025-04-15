@@ -71,6 +71,7 @@ RUN dnf install -y \
     python3-tornado \
     python3-virtualenv \
     python3-yaml \
+    python3-gpg \
     python3-zmq \
     python3-pyasn1 \
     redhat-rpm-config \

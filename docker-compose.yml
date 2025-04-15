@@ -9,6 +9,7 @@ services:
     user: root
     volumes:
       - secure-volume:/var/lib/keylime
+      - ./keylime-configs/verifier.conf:/etc/keylime/verifier.conf
     ports:
         - "8892:8892"
     command: [
@@ -64,7 +65,7 @@ services:
             --tcti=swtpm: \
             --allow-root \
             --flush-all &
-        RUST_LOG=keylime_agent=trace /rust-keylime/keylime_agent
+        RUST_LOG=keylime-agent=trace /rust-keylime/keylime-agent
 volumes:
   secure-volume:
 
