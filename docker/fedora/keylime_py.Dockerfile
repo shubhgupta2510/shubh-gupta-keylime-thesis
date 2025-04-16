@@ -62,7 +62,7 @@ RUN dnf install -y \
     python3-cryptography \
     python3-dbus \
     python3-devel \
-    python3-m2crypto \
+    # python3-m2crypto \
     python3-pip \
     python3-requests \
     python3-setuptools \
@@ -82,6 +82,9 @@ RUN dnf install -y \
     uthash-devel \
     wget \
     which
+
+    RUN pip3 install m2crypto
+
 
 WORKDIR ${HOME}
 RUN git clone https://github.com/shubhgupta2510/shubh-keylime-repo.git && \
