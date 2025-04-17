@@ -5,7 +5,7 @@
 # It is not recommended for use beyond testing scenarios.
 ##############################################################################
 
-FROM fedora:latest
+FROM fedora:40
 LABEL version="2.0.1" description="Keylime - Python Devel Env"
 
 # environment variables
@@ -18,35 +18,22 @@ COPY dbus-policy.conf /etc/dbus-1/system.d/
 COPY wait.sh /root/
 RUN ["chmod", "+x", "/root/wait.sh"]
 
-RUN dnf install -y python3.11 curl && \
-    curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11 && \
-    alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 && \
-    alternatives --install /usr/bin/pip3 pip3 /usr/local/bin/pip3 1
+RUN dnf install -y \
+      python3 \
+      python3-pip \
+      python3-devel \
+   && dnf clean all
+
 
 
 # Install dev tools and libraries (includes openssl-devel)
-RUN dnf install -y \
-    gcc \
-    gcc-c++ \
-    make \
-    git \
-    swig \
-    pkgconfig \
-    openssl-devel \
-    libtool \
-    autoconf \
-    automake \
-    libcurl-devel python3-devel python3-pip && dnf clean all
+RUN dnf install -y gcc gcc-c++ make git swig python3-devel pkgconfig openssl-devel libtool autoconf automake libcurl-devel && dnf clean all
 
 # Install additional packages
 RUN dnf install -y \
-    clang-devel \
-    kmod \
-    llvm llvm-devel \
-    pkg-config \
-    automake \
-    cargo \
-    clang-devel \
+    clang-devel kmod llvm llvm-devel \
+    pkg-config automake cargo \
+    openssl-devel \
     dbus \
     dbus-daemon \
     dbus-devel \
