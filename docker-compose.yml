@@ -9,11 +9,12 @@ services:
     user: root
     volumes:
       - secure-volume:/var/lib/keylime
-      - ./keylime-configs/verifier.conf:/etc/keylime/verifier.conf
+      - ./config/verifier.conf:/etc/keylime/verifier.conf
     ports:
         - "8892:8892"
     command: [
-      "/usr/local/bin/keylime_verifier"
+      "sh", "-c", 
+      "mkdir -p /etc/keylime && mkdir -p /usr/share/keylime/templates && mkdir -p /var/lib/keylime/cv_ca && touch /etc/keylime/logging.conf && /usr/local/bin/keylime_verifier"
     ]
   keylime-registrar:
     build:
@@ -35,20 +36,29 @@ services:
     image: keylime_rust
     hostname: 'keylime-agent'
     user: root
+    privileged: true # Add privileged mode for secure mount operations
     volumes:
       - ./target/debug/:/rust-keylime
+      - secure-volume:/var/lib/keylime
     network_mode: host
     environment:
-    - TCTI=tabrmd:bus_type=system
+      - TCTI=tabrmd:bus_type=system
+      - RUST_KEYLIME_SKIP_SECURE_MOUNT=1 # Skip secure mount
+      - RUST_BACKTRACE=1 # Add for better error diagnostics
     command:
       - /bin/bash
       - -c
       - |
-        mkdir /tmp/tpmdir
+        mkdir -p /tmp/tpmdir
+        mkdir -p /var/lib/keylime
+        # Create keylime user and group
+        useradd -r keylime || echo "User may already exist"
+        # Set up dbus
         rm -rf /var/run/dbus
         mkdir /var/run/dbus
         dbus-daemon --system
         ls /etc/dbus-1/system.d/
+        # Set up TPM emulator
         swtpm_setup --tpm2 \
             --tpmstate /tmp/tpmdir \
             --createek --decryption --create-ek-cert \
@@ -60,12 +70,15 @@ services:
             --ctrl type=tcp,port=2322 \
             --server type=tcp,port=2321 \
             --daemon
+        sleep 2 # Add a delay to ensure TPM is ready
         tpm2-abrmd \
             --logger=stdout \
             --tcti=swtpm: \
             --allow-root \
             --flush-all &
-        RUST_LOG=keylime-agent=trace /rust-keylime/keylime-agent
+        sleep 2 # Add a delay to ensure ABRMD is ready
+        # Run with debug logging
+        # RUST_LOG=keylime_agent=debug,keylime=debug /usr/bin/keylime_agent
 volumes:
   secure-volume:
 
