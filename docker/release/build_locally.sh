@@ -32,7 +32,7 @@ DOCKER_BUILDX_FLAGS=${@:-"--load"}
 # - distroless (default)
 # - fedora
 # - wolfi
-DOCKERFILE_TYPE="${DOCKERFILE_TYPE:-distroless}"
+DOCKERFILE_TYPE="${DOCKERFILE_TYPE:-fedora}"
 
 LOG_DIR=${LOG_DIR:-/tmp}
 DOCKERFILE="${SCRIPT_DIR}/Dockerfile.${DOCKERFILE_TYPE}"
