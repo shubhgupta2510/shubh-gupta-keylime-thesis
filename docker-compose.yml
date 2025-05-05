@@ -11,30 +11,102 @@ services:
       - ./config/verifier.conf:/etc/keylime/verifier.conf
     ports:
         - "8892:8892"
-    command: [
-      "sh", "-c", 
-      "mkdir -p /etc/keylime && mkdir -p /usr/share/keylime/templates && mkdir -p /var/lib/keylime/cv_ca && touch /etc/keylime/logging.conf && /usr/local/bin/keylime_verifier"
-    ]
+    environment:
+        - KEYLIME_database_url=sqlite:////var/lib/keylime/keylime.db
+    command: |
+      bash -c "
+      dnf install -y openssl && dnf clean all && 
+      mkdir -p /etc/keylime && mkdir -p /usr/share/keylime/templates && mkdir -p /var/lib/keylime/cv_ca && touch /etc/keylime/logging.conf && 
+      if [ ! -f /var/lib/keylime/cv_ca/server-cert.crt ]; then
+        cd /var/lib/keylime/cv_ca && 
+        openssl req -x509 -newkey rsa:2048 -keyout server-private.pem -out server-cert.crt -sha256 -days 365 -nodes -subj '/CN=keylime-verifier' &&
+        openssl req -x509 -newkey rsa:2048 -keyout ca-private.pem -out cacert.crt -sha256 -days 365 -nodes -subj '/CN=keylime-ca' &&
+        openssl req -newkey rsa:2048 -keyout client-private.pem -out client-req.pem -subj '/CN=keylime-client' -nodes &&
+        openssl x509 -req -in client-req.pem -CA cacert.crt -CAkey ca-private.pem -out client-cert.crt -sha256 -days 365 -CAcreateserial
+      fi && 
+      /usr/local/bin/keylime_verifier
+      "
   keylime-registrar:
     build:
       context: ./docker/fedora/
       dockerfile: keylime_py.Dockerfile
     image: keylime_py
-    hostname: 'keylime-verifier' # this is a bit of poor workaround, will fix in python code
+    hostname: 'keylime-registrar'
     user: root
     volumes:
       - secure-volume:/var/lib/keylime
-      - ./config/registrar.conf:/etc/keylime/registrar.conf    
     ports:
         - "8891:8891"
         - "8890:8890"
-    command: <
-        "/root/wait.sh", "/var/lib/keylime/cv_ca/client-cert.crt", "keylime_registrar"
-        bash -c "
-        sed -i 's/p_sz, m_ovfl = p_sz_m_ovfl.split(",")/p_sz, m_ovfl = "4096", "64KiB"/' shubh-keylime-repo/keylime/db/keylime_db.py && 
-        sed -i 's/^registrar_ip./registrar_ip = keylime-registrar/' /etc/keylime/registrar.conff &&
-        sed -i 's/^ip = ./ip = 0.0.0.0/' /etc/keylime/registrar.conf &&
-        exec /usr/local/bin/keylime_registrar
+    environment:
+        - KEYLIME_database_url=sqlite:////var/lib/keylime/reg_data.sqlite
+    command: |
+      bash -c "
+      until [ -f /var/lib/keylime/cv_ca/client-cert.crt ]; do
+        echo 'Waiting for certificate to be generated...'
+        sleep 2
+      done
+      mkdir -p /etc/keylime
+      mkdir -p /usr/share/keylime/templates
+      touch /etc/keylime/logging.conf
+      
+      # Create a simplified direct fix for the registrar
+      cat > /tmp/simple_fix.py << 'EOF'
+        #!/usr/bin/env python3
+        import os
+        import sys
+        from sqlalchemy import create_engine
+
+        # Set up environment variables needed for keylime
+        os.environ['KEYLIME_registrar_database_url'] = 'sqlite:////var/lib/keylime/reg_data.sqlite'
+
+        # Simple wrapper to bypass the db_page_size error
+        from pkg_resources import load_entry_point
+
+        # Create a proper registrar.conf
+        os.system(\"\"\"cat << CONFEOF > /etc/keylime/registrar.conf
+        [registrar]
+        ip = 0.0.0.0
+        port = 8891
+        tls_port = 8890
+        tls_dir = /var/lib/keylime/cv_ca
+        server_key = /var/lib/keylime/cv_ca/server-private.pem
+        server_cert = /var/lib/keylime/cv_ca/server-cert.crt
+        trusted_client_ca = [\"/var/lib/keylime/cv_ca/cacert.crt\"]
+
+        [database]
+        database_url = sqlite:////var/lib/keylime/reg_data.sqlite
+        pool_size = 20
+        max_overflow = 10
+        CONFEOF\"\"\")
+
+                # Find and patch the problematic file
+                patch_file = None
+                for root, dirs, files in os.walk('/usr/local/lib/python3.12/site-packages/'):
+                    for file in files:
+                        if file == 'db.py' and 'keylime' in root:
+                            full_path = os.path.join(root, file)
+                            with open(full_path, 'r') as f:
+                                content = f.read()
+                            
+                            if 'p_sz, m_ovfl = p_sz_m_ovfl.split(\",\")' in content:
+                                # Found the problematic line
+                                content = content.replace('p_sz, m_ovfl = p_sz_m_ovfl.split(\",\")', 'p_sz, m_ovfl = \"4096\", \"64KiB\"')
+                                with open(full_path, 'w') as f:
+                                    f.write(content)
+                                print(f\"Successfully patched {full_path}\")
+                                patch_file = full_path
+
+                if not patch_file:
+                    print(\"Could not find the db.py file to patch\")
+
+                # Now run the registrar
+                sys.exit(load_entry_point('keylime==7.12.1', 'console_scripts', 'keylime_registrar')())
+        EOF
+
+        # Make executable and run
+        chmod +x /tmp/simple_fix.py
+        python3 /tmp/simple_fix.py
         "
   keylime_agent:
     build:
