@@ -26,6 +26,9 @@ RUN dnf install -y \
     autoconf \
     automake \
     libcurl-devel \
+    nc \
+    iproute \
+    bind-utils \
  && dnf clean all
 
 

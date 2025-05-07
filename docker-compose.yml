@@ -6,13 +6,15 @@ services:
     image: keylime_py
     hostname: 'keylime-verifier'
     user: root
+    networks:
+      - keylime-network
     volumes:
       - secure-volume:/var/lib/keylime
       - ./config/verifier.conf:/etc/keylime/verifier.conf
     ports:
-        - "8892:8892"
+      - "8892:8892"
     environment:
-        - KEYLIME_database_url=sqlite:////var/lib/keylime/keylime.db
+      - KEYLIME_database_url=sqlite:////var/lib/keylime/keylime.db
     command: |
       bash -c "
       dnf install -y openssl && dnf clean all && 
@@ -24,8 +26,10 @@ services:
         openssl req -newkey rsa:2048 -keyout client-private.pem -out client-req.pem -subj '/CN=keylime-client' -nodes &&
         openssl x509 -req -in client-req.pem -CA cacert.crt -CAkey ca-private.pem -out client-cert.crt -sha256 -days 365 -CAcreateserial
       fi && 
-      /usr/local/bin/keylime_verifier
+      # Ensure verifier stays in foreground
+      exec /usr/local/bin/keylime_verifier
       "
+
   keylime-registrar:
     build:
       context: ./docker/fedora/
@@ -33,13 +37,15 @@ services:
     image: keylime_py
     hostname: 'keylime-registrar'
     user: root
+    networks:
+      - keylime-network
     volumes:
       - secure-volume:/var/lib/keylime
     ports:
-        - "8891:8891"
-        - "8890:8890"
+      - "8891:8891"
+      - "8890:8890"
     environment:
-        - KEYLIME_database_url=sqlite:////var/lib/keylime/reg_data.sqlite
+      - KEYLIME_database_url=sqlite:////var/lib/keylime/reg_data.sqlite
     command: |
       bash -c "
       until [ -f /var/lib/keylime/cv_ca/client-cert.crt ]; do
@@ -50,80 +56,77 @@ services:
       mkdir -p /usr/share/keylime/templates
       touch /etc/keylime/logging.conf
       
-      # Create a simplified direct fix for the registrar
-      cat > /tmp/simple_fix.py << 'EOF'
-        #!/usr/bin/env python3
-        import os
-        import sys
-        from sqlalchemy import create_engine
+      cat > /tmp/fixed_registrar.py << 'EOF'
+      #!/usr/bin/env python3
 
-        # Set up environment variables needed for keylime
-        os.environ['KEYLIME_registrar_database_url'] = 'sqlite:////var/lib/keylime/reg_data.sqlite'
+      import os
+      import sys
+      from pkg_resources import load_entry_point
 
-        # Simple wrapper to bypass the db_page_size error
-        from pkg_resources import load_entry_point
+      # Monkey patch the problematic function in keylime models
+      try:
+          from keylime.models.base import db
+          original_make_engine = db.make_engine
+          
+          def patched_make_engine(config_key):
+              try:
+                  return original_make_engine(config_key)
+              except ValueError as e:
+                  if "not enough values to unpack" in str(e):
+                      print("Patching pool_size and max_overflow configuration")
+                      # Set default values
+                      db.engine = db.create_engine(
+                          db.get_c_database_url(config_key),
+                          pool_size=20,
+                          max_overflow=10
+                      )
+                      return db.engine
+                  raise
+            
+          # Apply the patch
+          db.make_engine = patched_make_engine
+          print("Successfully applied database connection patch")
+      except ImportError as e:
+          print(f"Failed to import required module: {e}")
+          sys.exit(1)
 
-        # Create a proper registrar.conf
-        os.system(\"\"\"cat << CONFEOF > /etc/keylime/registrar.conf
-        [registrar]
-        ip = 0.0.0.0
-        port = 8891
-        tls_port = 8890
-        tls_dir = /var/lib/keylime/cv_ca
-        server_key = /var/lib/keylime/cv_ca/server-private.pem
-        server_cert = /var/lib/keylime/cv_ca/server-cert.crt
-        trusted_client_ca = [\"/var/lib/keylime/cv_ca/cacert.crt\"]
+      # Start the registrar
+      try:
+          sys.exit(load_entry_point('keylime==7.12.1', 'console_scripts', 'keylime_registrar')())
+      except Exception as e:
+          print(f"Error starting registrar: {e}")
+          sys.exit(1)
+      EOF
 
-        [database]
-        database_url = sqlite:////var/lib/keylime/reg_data.sqlite
-        pool_size = 20
-        max_overflow = 10
-        CONFEOF\"\"\")
+      chmod +x /tmp/fixed_registrar.py
+      exec python3 /tmp/fixed_registrar.py
+      
+      # Start registrar in foreground to keep container running
+      exec /usr/local/bin/keylime_registrar
+      "
 
-                # Find and patch the problematic file
-                patch_file = None
-                for root, dirs, files in os.walk('/usr/local/lib/python3.12/site-packages/'):
-                    for file in files:
-                        if file == 'db.py' and 'keylime' in root:
-                            full_path = os.path.join(root, file)
-                            with open(full_path, 'r') as f:
-                                content = f.read()
-                            
-                            if 'p_sz, m_ovfl = p_sz_m_ovfl.split(\",\")' in content:
-                                # Found the problematic line
-                                content = content.replace('p_sz, m_ovfl = p_sz_m_ovfl.split(\",\")', 'p_sz, m_ovfl = \"4096\", \"64KiB\"')
-                                with open(full_path, 'w') as f:
-                                    f.write(content)
-                                print(f\"Successfully patched {full_path}\")
-                                patch_file = full_path
-
-                if not patch_file:
-                    print(\"Could not find the db.py file to patch\")
-
-                # Now run the registrar
-                sys.exit(load_entry_point('keylime==7.12.1', 'console_scripts', 'keylime_registrar')())
-        EOF
-
-        # Make executable and run
-        chmod +x /tmp/simple_fix.py
-        python3 /tmp/simple_fix.py
-        "
-  keylime_agent:
+  keylime-agent:
     build:
       context: ./docker/fedora/
       dockerfile: keylime_rust.Dockerfile
     image: keylime_rust
     hostname: 'keylime-agent'
     user: root
-    privileged: true # Add privileged mode for secure mount operations
+    privileged: true
     volumes:
       - ./target/debug/:/rust-keylime
       - secure-volume:/var/lib/keylime
-    network_mode: host
+    # Create a named network so containers can properly resolve each other
+    networks:
+      - keylime-network
+    depends_on:
+      - keylime-registrar
+      - keylime-verifier
     environment:
       - TCTI=tabrmd:bus_type=system
-      - RUST_KEYLIME_SKIP_SECURE_MOUNT=1 # Skip secure mount
-      - RUST_BACKTRACE=1 # Add for better error diagnostics
+      - RUST_KEYLIME_SKIP_SECURE_MOUNT=1
+      - RUST_BACKTRACE=1
+      - RUST_LOG=keylime_agent=debug,keylime=debug
     command:
       - /bin/bash
       - -c
@@ -136,7 +139,7 @@ services:
         rm -rf /var/run/dbus
         mkdir /var/run/dbus
         dbus-daemon --system
-        ls /etc/dbus-1/system.d/
+        
         # Set up TPM emulator
         swtpm_setup --tpm2 \
             --tpmstate /tmp/tpmdir \
@@ -149,15 +152,39 @@ services:
             --ctrl type=tcp,port=2322 \
             --server type=tcp,port=2321 \
             --daemon
-        sleep 2 # Add a delay to ensure TPM is ready
+        sleep 2
         tpm2-abrmd \
             --logger=stdout \
             --tcti=swtpm: \
             --allow-root \
             --flush-all &
-        sleep 2 # Add a delay to ensure ABRMD is ready
-        # Run with debug logging
-        # RUST_LOG=keylime_agent=debug,keylime=debug /usr/bin/keylime_agent
+        sleep 2
+        
+        # Install netcat if needed
+        dnf install -y nc || true
+        
+        # Wait for registrar to be available
+        echo "Waiting for registrar to be available at keylime-registrar:8891..."
+        
+        # First ensure DNS resolution works 
+        until getent hosts keylime-registrar; do
+          echo "DNS resolution for keylime-registrar not working yet, waiting..."
+          sleep 3
+        done
+        
+        # Then check for port availability
+        until nc -z keylime-registrar 8891; do
+          echo "Registrar port not available yet, waiting..."
+          sleep 5
+        done
+        echo "Registrar available, starting agent..."
+        
+        # Now start the agent
+        exec /usr/bin/keylime_agent
+
 volumes:
   secure-volume:
 
+networks:
+  keylime-network:
+    driver: bridge
