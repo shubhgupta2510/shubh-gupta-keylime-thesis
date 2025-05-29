@@ -55,6 +55,7 @@ with-zmq = ["zmq"]
 legacy-python-actions = []
 
 [package.metadata.deb]
+name = "keylime-agent"
 section = "net"
 assets = [
   ["target/release/keylime_agent", "usr/bin/", "755"],
