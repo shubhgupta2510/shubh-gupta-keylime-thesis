@@ -1,0 +1,46 @@
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from keylime_rust.Dockerfile
+#1 transferring dockerfile: 1.65kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/fedora:latest
+#2 DONE 0.8s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 [1/6] FROM docker.io/library/fedora:latest@sha256:6beec36f3b1c7fd128bb69a59e20d4a897e65a43145ebb252fb39923c98c1c8b
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 38B done
+#5 DONE 0.0s
+
+#6 [3/6] RUN dnf install -y     gcc     gcc-c++     make     git     pkgconfig     openssl-devel     libtool     autoconf     automake     libcurl-devel     nc     iproute     bind-utils  && dnf clean all
+#6 CACHED
+
+#7 [2/6] COPY dbus-policy.conf /etc/dbus-1/system.d/
+#7 CACHED
+
+#8 [4/6] RUN dnf makecache &&   dnf -y install automake cargo clang-devel dbus dbus-daemon dbus-devel dnf-plugins-core efivar-devel gcc git glib2-devel glib2-static gnulib kmod llvm llvm-devel libselinux-python3 libtool libtpms make openssl-devel redhat-rpm-config rust clippy cargo pkg-config swtpm swtpm-tools tpm2-abrmd tpm2-tools tpm2-tss tpm2-tss-devel uthash-devel czmq-devel &&   dnf clean all &&   rm -rf /var/cache/dnf/*
+#8 CACHED
+
+#9 [5/6] WORKDIR /rust-keylime
+#9 CACHED
+
+#10 [6/6] RUN git clone https://github.com/keylime/rust-keylime.git && cd rust-keylime && make && make install && cargo clean
+#10 CACHED
+
+#11 exporting to image
+#11 exporting layers done
+#11 writing image sha256:cf8254e40aa831bb364a54dc14a4740ee335d940d017d4fa60abf081b89b7fa2 0.0s done
+#11 naming to docker.io/library/keylime_rust:latest
+#11 naming to docker.io/library/keylime_rust:latest 0.0s done
+#11 DONE 0.0s
+
+ [33m3 warnings found (use docker --debug to expand):
+[0m - UndefinedVar: Usage of undefined variable '$HOME' (line 13)
+ - LegacyKeyValueFormat: "ENV key=value" should be used instead of legacy "ENV key value" format (line 13)
+ - LegacyKeyValueFormat: "ENV key=value" should be used instead of legacy "ENV key value" format (line 14)

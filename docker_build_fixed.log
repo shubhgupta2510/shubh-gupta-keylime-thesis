@@ -1,0 +1,59 @@
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from keylime_rust.Dockerfile
+#1 transferring dockerfile: 1.65kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/fedora:latest
+#2 DONE 1.6s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 [1/8] FROM docker.io/library/fedora:latest@sha256:6beec36f3b1c7fd128bb69a59e20d4a897e65a43145ebb252fb39923c98c1c8b
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 684.83kB 0.2s done
+#5 DONE 0.3s
+
+#6 [2/8] COPY dbus-policy.conf /etc/dbus-1/system.d/
+#6 CACHED
+
+#7 [3/8] RUN dnf install -y     gcc     gcc-c++     make     git     pkgconfig     openssl-devel     libtool     autoconf     automake     libcurl-devel     nc     iproute     bind-utils  && dnf clean all
+#7 CACHED
+
+#8 [4/8] RUN dnf makecache &&   dnf -y install automake cargo clang-devel dbus dbus-daemon dbus-devel dnf-plugins-core efivar-devel gcc git glib2-devel glib2-static gnulib kmod llvm llvm-devel libselinux-python3 libtool libtpms make openssl-devel redhat-rpm-config rust clippy cargo pkg-config swtpm swtpm-tools tpm2-abrmd tpm2-tools tpm2-tss tpm2-tss-devel uthash-devel czmq-devel &&   dnf clean all &&   rm -rf /var/cache/dnf/*
+#8 CACHED
+
+#9 [5/8] WORKDIR /rust-keylime
+#9 CACHED
+
+#10 [6/8] COPY . rust-keylime/
+#10 DONE 306.1s
+
+#11 [7/8] WORKDIR /rust-keylime/rust-keylime
+#11 DONE 1.5s
+
+#12 [8/8] RUN make && make install && cargo clean
+#12 2.885 make: Nothing to be done for 'all'.
+#12 2.899 mkdir -p /etc/keylime/
+#12 2.900 mkdir -p /etc/keylime/agent.conf.d
+#12 2.901 cp ./keylime-agent.conf /etc/keylime/agent.conf
+#12 2.936 for f in target/debug/keylime_agent target/debug/keylime_ima_emulator; do \
+#12 2.936 	install -D -t /usr/bin "$f"; \
+#12 2.936 done
+#12 7.811 install -D -m 644 -t /usr/lib/systemd/system dist/systemd/system/keylime_agent.service
+#12 31.78 install -D -m 644 -t /usr/lib/systemd/system dist/systemd/system/var-lib-keylime-secure.mount
+#12 31.78 # Remove when https://github.com/keylime/rust-keylime/issues/325 is fixed
+#12 31.79 install -D -t /usr/libexec/keylime keylime-agent/tests/actions/shim.py
+#12 56.33      Removed 6364 files, 2.7GiB total
+#12 DONE 57.1s
+
+#13 exporting to image
+#13 exporting layers
+#13 exporting layers 38.8s done
+#13 writing image sha256:0ac16fadf522fd4151a0e51f0116896347dcc4d97b26a81d1247e54ec3daa312 0.0s done
+#13 naming to docker.io/library/keylime_rust:fixed 0.1s done
+#13 DONE 39.0s
