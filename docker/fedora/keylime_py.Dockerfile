@@ -5,7 +5,7 @@
 # It is not recommended for use beyond testing scenarios.
 ##############################################################################
 
-FROM fedora:latest
+FROM fedora:40
 LABEL version="2.0.1" description="Keylime - Python Devel Env"
 
 # environment variables
@@ -18,30 +18,21 @@ COPY dbus-policy.conf /etc/dbus-1/system.d/
 COPY wait.sh /root/
 RUN ["chmod", "+x", "/root/wait.sh"]
 
+# Install Python and pip
+RUN dnf install -y \
+      python3 \
+      python3-pip \
+      python3-devel \
+   && dnf clean all
 
 # Install dev tools and libraries (includes openssl-devel)
-RUN dnf install -y \
-    gcc \
-    gcc-c++ \
-    make \
-    git \
-    pkgconfig \
-    openssl-devel \
-    libtool \
-    autoconf \
-    automake \
-    libcurl-devel \
- && dnf clean all
+RUN dnf install -y gcc gcc-c++ make git swig python3-devel pkgconfig openssl-devel libtool autoconf automake libcurl-devel && dnf clean all
 
 # Install additional packages
 RUN dnf install -y \
-    clang-devel \
-    kmod \
-    llvm llvm-devel \
-    pkg-config \
-    automake \
-    cargo \
-    clang-devel \
+    clang-devel kmod llvm llvm-devel \
+    pkg-config automake cargo \
+    openssl-devel \
     dbus \
     dbus-daemon \
     dbus-devel \
@@ -62,7 +53,6 @@ RUN dnf install -y \
     python3-cryptography \
     python3-dbus \
     python3-devel \
-    python3-m2crypto \
     python3-pip \
     python3-requests \
     python3-setuptools \
@@ -83,6 +73,9 @@ RUN dnf install -y \
     wget \
     which
 
+RUN pip3 install m2crypto
+
+# Install a specific version of Keylime compatible with Python 3.10
 WORKDIR ${HOME}
 RUN git clone https://github.com/shubhgupta2510/shubh-keylime-repo.git && \
 cd shubh-keylime-repo && \

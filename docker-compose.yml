@@ -1,54 +1,39 @@
-version: '3.6'
 services:
-  keylime-verifier:
-    build:
-      context: ./docker/fedora/
-      dockerfile: keylime_py.Dockerfile
-    image: keylime_py
-    hostname: 'keylime-verifier'
-    user: root
-    volumes:
-      - secure-volume:/var/lib/keylime
-      - ./keylime-configs/verifier.conf:/etc/keylime/verifier.conf
-    ports:
-        - "8892:8892"
-    command: [
-      "/usr/local/bin/keylime_verifier"
-    ]
-  keylime-registrar:
-    build:
-      context: ./docker/fedora/
-      dockerfile: keylime_py.Dockerfile
-    image: keylime_py
-    hostname: 'keylime-verifier' # this is a bit of poor workaround, will fix in python code
-    user: root
-    volumes:
-      - secure-volume:/var/lib/keylime
-    ports:
-        - "8891:8891"
-        - "8890:8890"
-    command: ["/root/wait.sh", "/var/lib/keylime/cv_ca/client-cert.crt", "keylime_registrar"]
-  keylime_agent:
+
+  keylime-agent:
     build:
       context: ./docker/fedora/
       dockerfile: keylime_rust.Dockerfile
     image: keylime_rust
     hostname: 'keylime-agent'
     user: root
+    privileged: true
     volumes:
       - ./target/debug/:/rust-keylime
-    network_mode: host
+      - secure-volume:/var/lib/keylime
+      - ./config-override/agent.conf:/etc/keylime/agent.conf.d/override.conf
+    # Create a named network so containers can properly resolve each other
+    networks:
+      - keylime-network
     environment:
-    - TCTI=tabrmd:bus_type=system
+      - TCTI=tabrmd:bus_type=system
+      - RUST_KEYLIME_SKIP_SECURE_MOUNT=1
+      - RUST_BACKTRACE=1
+      - RUST_LOG=keylime_agent=debug,keylime=debug
     command:
       - /bin/bash
       - -c
       - |
-        mkdir /tmp/tpmdir
+        mkdir -p /tmp/tpmdir
+        mkdir -p /var/lib/keylime
+        # Create keylime user and group
+        useradd -r keylime || echo "User may already exist"
+        # Set up dbus
         rm -rf /var/run/dbus
         mkdir /var/run/dbus
         dbus-daemon --system
-        ls /etc/dbus-1/system.d/
+        
+        # Set up TPM emulator
         swtpm_setup --tpm2 \
             --tpmstate /tmp/tpmdir \
             --createek --decryption --create-ek-cert \
@@ -60,12 +45,39 @@ services:
             --ctrl type=tcp,port=2322 \
             --server type=tcp,port=2321 \
             --daemon
+        sleep 2
         tpm2-abrmd \
             --logger=stdout \
             --tcti=swtpm: \
             --allow-root \
             --flush-all &
-        RUST_LOG=keylime-agent=trace /rust-keylime/keylime-agent
+        sleep 2
+        
+        # Install netcat if needed
+        dnf install -y nc || true
+        
+        # Wait for registrar to be available
+        echo "Waiting for registrar to be available at keylime-registrar:8891..."
+        
+        # First ensure DNS resolution works 
+        until getent hosts keylime-registrar; do
+          echo "DNS resolution for keylime-registrar not working yet, waiting..."
+          sleep 3
+        done
+        
+        # Then check for port availability
+        until nc -z keylime-registrar 8891; do
+          echo "Registrar port not available yet, waiting..."
+          sleep 5
+        done
+        echo "Registrar available, starting agent..."
+        
+        # Now start the agent
+        exec /usr/bin/keylime_agent
+
 volumes:
   secure-volume:
 
+networks:
+  keylime-network:
+    external: true
